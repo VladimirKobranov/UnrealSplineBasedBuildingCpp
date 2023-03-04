@@ -22,7 +22,8 @@ public:
 	static FVector SplinePointRotation(int Count, const USplineComponent* Spline_0, int Size);
 
 private:
-	int Number;
+	double ModuleHeight;
+	TArray<int> SetBalconyLocations;
 
 	UFUNCTION(BlueprintCallable)
 	void SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Corner, TArray<UStaticMesh*> BalconyWindow,
@@ -30,7 +31,9 @@ private:
 	                   TArray<UStaticMesh*> BalconyAccessories, UStaticMesh* Roof,
 	                   TArray<UStaticMesh*> WindowsAccessories, USplineComponent* Spline,
 	                   USplineComponent* Spline_Segmented, const int Seed, FVector HeightVector,
-	                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage);
+	                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage, TArray<int> BalconyLocations,
+	                   TArray<int> BalconyLocationsSides, TArray<int> EntraceLocations,
+	                   TArray<int> EntraceLocationsSides);
 	void SpawnArrayMesh(TArray<UStaticMesh*> SelectedMesh, FTransform Transform, int N);
 	void SpawnMesh(UStaticMesh* SelectedMesh, FTransform Transform);
 	UFUNCTION(BlueprintCallable)
