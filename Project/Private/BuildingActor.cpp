@@ -40,35 +40,58 @@ void ABuildingActor::SpawnMesh(UStaticMesh* SelectedMesh, const FTransform Trans
 	NewStaticMeshComp->SetStaticMesh(SelectedMesh);
 }
 
+void ABuildingActor::SetDefaultValues(FVector HeightVector, UStaticMesh* Wall, UStaticMesh* Roof, FTransform& Transform)
+{
+	const FBox ModuleBBox = Wall->GetBoundingBox();
+	const int ModuleZSize = (ModuleBBox.Max - ModuleBBox.Min).Z;
+	const int ZCount = HeightVector.Z / ModuleZSize;
+
+	const FBox ModuleRoofBBox = Roof->GetBoundingBox();
+	const int ModuleRoofZSize = (ModuleRoofBBox.Max - ModuleRoofBBox.Min).Z;
+
+	//const int OverallSize = ZCount * ModuleZSize + ModuleRoofZSize;
+
+	Transform.SetLocation((FVector3d(0, 0, HeightVector.Z)));
+	ModuleHeight = ModuleZSize;
+}
+
 //Main function
 void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Corner,
                                    TArray<UStaticMesh*> BalconyWindow, TArray<UStaticMesh*> Balcony,
                                    TArray<UStaticMesh*> Entrance, TArray<UStaticMesh*> BalconyAccessories,
                                    UStaticMesh* Roof, TArray<UStaticMesh*> WindowsAccessories, USplineComponent* Spline,
                                    USplineComponent* Spline_Segmented, const int Seed, FVector HeightVector,
-                                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage)
+                                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage,
+                                   TArray<int> BalconyLocations, TArray<int> BalconyLocationsSides,
+                                   TArray<int> EntraceLocations, TArray<int> EntraceLocationsSides)
 {
 	const FBox ModuleBBox = Windows[0]->GetBoundingBox();
 	const int ModuleXSize = (ModuleBBox.Max - ModuleBBox.Min).X;
 	const int ModuleZSize = (ModuleBBox.Max - ModuleBBox.Min).Z;
+	const FBox ModuleRoofBBox = Roof->GetBoundingBox();
+	const int ModuleRoofZSize = (ModuleRoofBBox.Max - ModuleRoofBBox.Min).Z;
 	TArray<FVector> OutPoints;
 	const int SplineSegments = Spline->GetNumberOfSplineSegments();
 
 	//Stream Initialization
 	const FRandomStream RandStream = FRandomStream(Seed);
 
-	for (int SplineSegmentsIndex = 0; SplineSegmentsIndex < SplineSegments; SplineSegmentsIndex++)
+	for (int SplineSegmentsIndex = 0; SplineSegmentsIndex <= SplineSegments; SplineSegmentsIndex++)
 	{
-		Spline->ConvertSplineSegmentToPolyLine(SplineSegmentsIndex, ESplineCoordinateSpace::Local, 0, OutPoints);
+		Spline->ConvertSplineSegmentToPolyLine(SplineSegmentsIndex, ESplineCoordinateSpace::Local, 10, OutPoints);
 		Spline_Segmented->SetSplinePoints(OutPoints, ESplineCoordinateSpace::Local, true);
 
 		FTransform Trans;
-		const float SplineLength = Spline_Segmented->GetSplineLength();
-		const float Count = UKismetMathLibrary::FTrunc(SplineLength / ModuleXSize);
+		const double SplineLength = Spline_Segmented->GetSplineLength();
+		const int Count = UKismetMathLibrary::FTrunc(SplineLength / ModuleXSize);
 		const int ZCount = HeightVector.Z / ModuleZSize;
 
 		for (int XIndex = 0; XIndex <= Count; XIndex++)
 		{
+			if (ZCount < 1)
+			{
+				return;
+			}
 			for (int ZIndex = 0; ZIndex <= ZCount; ZIndex++)
 			{
 				//Random values
@@ -80,83 +103,122 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 				const int BalconyAccessoriesMeshRandom = RandStream.FRandRange(0, BalconyAccessories.Num());
 				const int WindowsAccessoriesMeshRandom = RandStream.FRandRange(0, WindowsAccessories.Num());
 
-				float XRestValue = (SplineLength - Count * ModuleXSize);
-				const float XScale = (SplineLength - Count * ModuleXSize - XRestValue / 2) / ModuleXSize;
+				double XRestValue = (SplineLength - Count * ModuleXSize);
+
+				const double XScale = (SplineLength - Count * ModuleXSize - XRestValue / 2) / ModuleXSize;
+				const double ZScale = (HeightVector.Z - ZCount * ModuleZSize) / ModuleRoofZSize;
 				Trans.SetRotation(FQuat4d(FRotator3d(UKismetMathLibrary::MakeRotFromX(
 					SplinePointRotation(XIndex + 1, Spline_Segmented, ModuleXSize) - SplinePointRotation(
 						XIndex, Spline_Segmented, ModuleXSize)))));
+
 				//Main walls
-				if (XIndex != Count)
+				//Check Length < Module Size
+				if (SplineLength < ModuleXSize)
 				{
-					Trans.SetScale3D(FVector3d(1.0, 1.0, 1.0));
+					Trans.SetScale3D(FVector3d(XScale * 2, 1.0, 1.0));
 					Trans.SetLocation(FVector3d(
-						(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize + XRestValue / 2,
+						(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize,
 						                                                    ESplineCoordinateSpace::Local)).X,
-						(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize + XRestValue / 2,
+						(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize,
 						                                                    ESplineCoordinateSpace::Local)).Y,
 						ZIndex * ModuleZSize));
-					//First floor
-					if (ZIndex == 0)
-					{
-						if (XIndex == 2 && SplineSegmentsIndex == 1)
-						{
-							SpawnArrayMesh(Entrance, Trans, EntranceMeshRandom);
-						}
-						else
-						{
-							SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
-						}
-					}
-					//Roof
-					else if (ZIndex == ZCount)
-					{
-						SpawnMesh(Roof, Trans);
-					}
-					//Main floors
-					else
-					{
-						if (XIndex % 2 == 0)
-						{
-							SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
-							if (RandomNumber < WallAccessoriesPercentage)
-							{
-								SpawnArrayMesh(WindowsAccessories, Trans, WindowsAccessoriesMeshRandom);
-							}
-						}
-						else
-						{
-							SpawnArrayMesh(BalconyWindow, Trans, MainBalconyMeshRandom);
-							SpawnArrayMesh(Balcony, Trans, BalconyMeshRandom);
-							if (RandomNumber < BalconyAccessoriesPercentage)
-							{
-								SpawnArrayMesh(BalconyAccessories, Trans, BalconyAccessoriesMeshRandom);
-							}
-						}
-					}
-				}
-				//Corners 
-				if (XIndex == 0 || XIndex == Count)
-				{
-					if (XIndex == Count)
-					{
-						XRestValue = XRestValue / 2 * -1;
-					}
-					Trans.SetScale3D(FVector3d(XScale, 1.0, 1.0));
-					Trans.SetLocation(FVector3d(
-						(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize - XRestValue,
-						                                                    ESplineCoordinateSpace::Local)).X,
-						(Spline_Segmented->GetLocationAtDistanceAlongSpline(
-							XIndex * ModuleXSize - XRestValue,
-							ESplineCoordinateSpace::Local)).Y, ZIndex * ModuleZSize));
-					//Roof 
 					if (ZIndex == ZCount)
 					{
-						SpawnMesh(Roof, Trans);
+						Trans.SetScale3D(FVector3d(XScale * 2, 1.0, ZScale));
 					}
-					else
-					//Main walls
+					ZIndex == ZCount ? SpawnMesh(Roof, Trans) : SpawnMesh(Corner, Trans);
+				}
+				else
+				{
+					//Normal Size modules
+					if (XIndex != Count)
 					{
-						SpawnMesh(Corner, Trans);
+						Trans.SetScale3D(FVector3d(1.0, 1.0, 1.0));
+						Trans.SetLocation(FVector3d(
+							(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize + XRestValue / 2,
+								ESplineCoordinateSpace::Local)).X,
+							(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize + XRestValue / 2,
+								ESplineCoordinateSpace::Local)).Y,
+							ZIndex * ModuleZSize));
+						//First floor
+						if (ZIndex == 0)
+						{
+							//Entrance
+							if (EntraceLocations.Contains(XIndex) && EntraceLocationsSides.
+								Contains(SplineSegmentsIndex))
+							{
+								SpawnArrayMesh(Entrance, Trans, EntranceMeshRandom);
+							}
+							else
+							{
+								//First floor windows
+								SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
+							}
+						}
+						else if (ZIndex == ZCount)
+						{
+							//Roof
+							Trans.SetScale3D(FVector3d(1.0, 1.0, ZScale));
+							SpawnMesh(Roof, Trans);
+						}
+						//Main floors
+						else
+						{
+							//Balcony locations
+							if (BalconyLocations.Contains(XIndex) && BalconyLocationsSides.
+								Contains(SplineSegmentsIndex))
+							{
+								SpawnArrayMesh(BalconyWindow, Trans, MainBalconyMeshRandom);
+								SpawnArrayMesh(Balcony, Trans, BalconyMeshRandom);
+								if (RandomNumber < BalconyAccessoriesPercentage)
+								{
+									SpawnArrayMesh(BalconyAccessories, Trans, BalconyAccessoriesMeshRandom);
+								}
+							}
+							else
+							{
+								//Regular windows
+								SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
+								if (EntraceLocations.Contains(XIndex) && EntraceLocationsSides.
+									Contains(SplineSegmentsIndex))
+								{
+								}
+								else
+								{
+									//Accessories
+									if (RandomNumber < WallAccessoriesPercentage)
+									{
+										SpawnArrayMesh(WindowsAccessories, Trans, WindowsAccessoriesMeshRandom);
+									}
+								}
+							}
+						}
+					}
+					//Corners 
+					if (XIndex == 0 || XIndex == Count)
+					{
+						if (XIndex == Count)
+						{
+							XRestValue = XRestValue / 2 * -1;
+						}
+						Trans.SetScale3D(FVector3d(XScale, 1.0, 1.0));
+						Trans.SetLocation(FVector3d(
+							(Spline_Segmented->GetLocationAtDistanceAlongSpline(XIndex * ModuleXSize - XRestValue,
+								ESplineCoordinateSpace::Local)).X,
+							(Spline_Segmented->GetLocationAtDistanceAlongSpline(
+								XIndex * ModuleXSize - XRestValue,
+								ESplineCoordinateSpace::Local)).Y, ZIndex * ModuleZSize));
+						//Roof 
+						if (ZIndex == ZCount)
+						{
+							Trans.SetScale3D(FVector3d(XScale, 1.0, ZScale));
+							SpawnMesh(Roof, Trans);
+						}
+						else
+						//Main walls
+						{
+							SpawnMesh(Corner, Trans);
+						}
 					}
 				}
 			}
@@ -164,27 +226,15 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 	}
 }
 
-void ABuildingActor::SetDefaultValues(FVector HeightVector, UStaticMesh* Wall, UStaticMesh* Roof, FTransform& Transform)
-{
-	const FBox ModuleBBox = Wall->GetBoundingBox();
-	const int ModuleZSize = (ModuleBBox.Max - ModuleBBox.Min).Z;
-	const int ZCount = HeightVector.Z / ModuleZSize;
-
-	const FBox ModuleRoofBBox = Roof->GetBoundingBox();
-	const int ModuleRoofZSize = (ModuleRoofBBox.Max - ModuleRoofBBox.Min).Z;
-
-	const int OverallSize = ZCount * ModuleZSize + ModuleRoofZSize;
-	Transform.SetLocation((FVector3d(0, 0, OverallSize)));
-	Number = 3;
-}
-
 UDynamicMesh* ABuildingActor::SpawnCap(UDynamicMesh* DynamicMesh, FGeometryScriptPrimitiveOptions PrimitiveOptions,
                                        UGeometryScriptDebug* Debug, USplineComponent* Spline, float Height,
                                        bool bCapped, FTransform Transform)
 {
-	//const FTransform Trans;
+	if (Transform.GetLocation().Z < ModuleHeight)
+	{
+		return DynamicMesh;
+	}
 
-	int SecondNumber = Number;
 	TArray<FVector2d> PolygonVertices;
 	const int SplinePointsNumber = Spline->GetNumberOfSplinePoints();
 
