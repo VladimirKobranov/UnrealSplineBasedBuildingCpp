@@ -1,3 +1,6 @@
+//Copyright Vk
+//https://github.com/VladimirKobranov
+
 #include "BuildingActor.h"
 #include "SplineBuilding.h"
 #include "Components/SplineComponent.h"
@@ -59,18 +62,19 @@ void ABuildingActor::SetDefaultValues(FVector HeightVector, UStaticMesh* Wall, U
 void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Corner,
                                    TArray<UStaticMesh*> BalconyWindow, TArray<UStaticMesh*> Balcony,
                                    TArray<UStaticMesh*> Entrance, TArray<UStaticMesh*> BalconyAccessories,
-                                   UStaticMesh* Roof, TArray<UStaticMesh*> WindowsAccessories, USplineComponent* Spline,
-                                   USplineComponent* Spline_Segmented, const int Seed, FVector HeightVector,
-                                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage,
-                                   TArray<int> BalconyLocations, TArray<int> BalconyLocationsSides,
-                                   TArray<int> EntraceLocations, TArray<int> EntraceLocationsSides)
+                                   UStaticMesh* Roof, TArray<UStaticMesh*> WindowsAccessories,TArray<UStaticMesh*> Pipe,
+                                   USplineComponent* Spline, USplineComponent* Spline_Segmented,
+                                   const int Seed, FVector HeightVector, int BalconyAccessoriesPercentage,
+                                   int WallAccessoriesPercentage, TArray<int> BalconyLocations,
+                                   TArray<int> BalconyLocationsSides,TArray<int> EntraceLocations,
+                                   TArray<int> EntraceLocationsSides)
 {
 	const FBox ModuleBBox = Windows[0]->GetBoundingBox();
 	const int ModuleXSize = (ModuleBBox.Max - ModuleBBox.Min).X;
 	const int ModuleZSize = (ModuleBBox.Max - ModuleBBox.Min).Z;
 	const FBox ModuleRoofBBox = Roof->GetBoundingBox();
 	const int ModuleRoofZSize = (ModuleRoofBBox.Max - ModuleRoofBBox.Min).Z;
-	TArray<FVector> OutPoints;
+	// TArray<FVector> OutPoints;
 	const int SplineSegments = Spline->GetNumberOfSplineSegments();
 
 	//Stream Initialization
@@ -94,6 +98,7 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 			}
 			for (int ZIndex = 0; ZIndex <= ZCount; ZIndex++)
 			{
+
 				//Random values
 				const int RandomNumber = RandStream.FRandRange(0, 100);
 				const int MainWallMeshRandom = RandStream.FRandRange(0, Windows.Num());
@@ -104,7 +109,6 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 				const int WindowsAccessoriesMeshRandom = RandStream.FRandRange(0, WindowsAccessories.Num());
 
 				double XRestValue = (SplineLength - Count * ModuleXSize);
-
 				const double XScale = (SplineLength - Count * ModuleXSize - XRestValue / 2) / ModuleXSize;
 				const double ZScale = (HeightVector.Z - ZCount * ModuleZSize) / ModuleRoofZSize;
 				Trans.SetRotation(FQuat4d(FRotator3d(UKismetMathLibrary::MakeRotFromX(
@@ -153,6 +157,7 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 							{
 								//First floor windows
 								SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
+								if(XIndex == Count -1 && SplineSegmentsIndex % 2 == 0 ) SpawnMesh(Pipe[1],Trans);
 							}
 						}
 						else if (ZIndex == ZCount)
@@ -160,6 +165,8 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 							//Roof
 							Trans.SetScale3D(FVector3d(1.0, 1.0, ZScale));
 							SpawnMesh(Roof, Trans);
+							Trans.SetScale3D(FVector3d(1.0,1.0,1.0));
+							if(XIndex == Count -1 && SplineSegmentsIndex % 2 == 0 ) SpawnMesh(Pipe[2],Trans);
 						}
 						//Main floors
 						else
@@ -179,6 +186,7 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 							{
 								//Regular windows
 								SpawnArrayMesh(Windows, Trans, MainWallMeshRandom);
+								if(XIndex == Count -1 && SplineSegmentsIndex % 2 == 0 ) SpawnMesh(Pipe[0],Trans);
 								if (EntraceLocations.Contains(XIndex) && EntraceLocationsSides.
 									Contains(SplineSegmentsIndex))
 								{
@@ -227,9 +235,14 @@ void ABuildingActor::SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Co
 }
 
 UDynamicMesh* ABuildingActor::SpawnCap(UDynamicMesh* DynamicMesh, FGeometryScriptPrimitiveOptions PrimitiveOptions,
-                                       UGeometryScriptDebug* Debug, USplineComponent* Spline, float Height,
-                                       bool bCapped, FTransform Transform)
+                                       UGeometryScriptDebug* Debug, USplineComponent* Spline,
+                                       FTransform Transform)
 {
+	//Fires Dynamic Mesh generation
+	FEditorScriptExecutionGuard Guard;
+	OnRebuildGeneratedMesh(DynamicMeshComponent->GetDynamicMesh());
+	bGeneratedMeshRebuildPending = false;
+
 	if (Transform.GetLocation().Z < ModuleHeight)
 	{
 		return DynamicMesh;
@@ -237,17 +250,14 @@ UDynamicMesh* ABuildingActor::SpawnCap(UDynamicMesh* DynamicMesh, FGeometryScrip
 
 	TArray<FVector2d> PolygonVertices;
 	const int SplinePointsNumber = Spline->GetNumberOfSplinePoints();
-
+	
 	for (int i = 0; i < SplinePointsNumber; i ++)
 	{
 		const FVector SplinePointLocation = Spline->GetLocationAtSplinePoint(i, ESplineCoordinateSpace::Local);
 		PolygonVertices.AddUnique(TArray<TVector2<double>>::ElementType(SplinePointLocation.X, SplinePointLocation.Y));
 	}
-
-	UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendSimpleExtrudePolygon(
-		DynamicMesh, PrimitiveOptions, Transform, TArray<FVector2D>(PolygonVertices),
-		Height, 0, bCapped, EGeometryScriptPrimitiveOriginMode::Base,
-		Debug);
+	UGeometryScriptLibrary_MeshPrimitiveFunctions::AppendTriangulatedPolygon(
+		DynamicMesh,PrimitiveOptions,Transform,PolygonVertices,true,nullptr);
 	{
 		if (DynamicMesh == nullptr)
 		{
@@ -270,24 +280,11 @@ UDynamicMesh* ABuildingActor::SpawnCap(UDynamicMesh* DynamicMesh, FGeometryScrip
 			ExtrudeGen.CrossSection.AppendVertex(Point);
 		}
 
-		constexpr int32 NumDivisions = FMath::Max(1, 0 - 1);
-		constexpr int32 NumPathSteps = NumDivisions + 1;
-		const double StepSize = static_cast<double>(Height) / static_cast<double>(NumDivisions);
-
-		for (int32 k = 0; k <= NumPathSteps; ++k)
-		{
-			const double StepHeight = (k == NumPathSteps) ? Height : (static_cast<double>(k) * StepSize);
-			ExtrudeGen.Path.Add(FVector3d(0, 0, StepHeight));
-		}
-
 		ExtrudeGen.InitialFrame = FFrame3d();
-		ExtrudeGen.bCapped = bCapped;
 		ExtrudeGen.bPolygroupPerQuad = (PrimitiveOptions.PolygroupMode ==
 			EGeometryScriptPrimitivePolygroupMode::PerQuad);
 		ExtrudeGen.Generate();
 
-		// FVector3d OriginShift = (Origin == EGeometryScriptPrimitiveOriginMode::Center) ? FVector3d(0, 0, -(Height/2)) : FVector3d::Zero();
-		// AppendPrimitive(TargetMesh, &ExtrudeGen, Transform, PrimitiveOptions, OriginShift);
 		return DynamicMesh;
 	}
 }
