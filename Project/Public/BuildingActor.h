@@ -1,5 +1,5 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
+//Copyright Vk
+//https://github.com/VladimirKobranov
 #pragma once
 
 #include "CoreMinimal.h"
@@ -10,7 +10,6 @@
 #include "GeometryScript/MeshPrimitiveFunctions.h"
 #include "BuildingActor.generated.h"
 
-
 UCLASS()
 class MYPROJECT_API ABuildingActor : public AGeneratedDynamicMeshActor
 {
@@ -20,6 +19,8 @@ public:
 	// Sets default values for this actor's properties
 	ABuildingActor();
 	static FVector SplinePointRotation(int Count, const USplineComponent* Spline_0, int Size);
+	TArray<FVector> OutPoints;
+	USplineComponent* SplineComp;
 
 private:
 	double ModuleHeight;
@@ -29,7 +30,7 @@ private:
 	void SpawnFunction(TArray<UStaticMesh*> Windows, UStaticMesh* Corner, TArray<UStaticMesh*> BalconyWindow,
 	                   TArray<UStaticMesh*> Balcony, TArray<UStaticMesh*> Entrance,
 	                   TArray<UStaticMesh*> BalconyAccessories, UStaticMesh* Roof,
-	                   TArray<UStaticMesh*> WindowsAccessories, USplineComponent* Spline,
+	                   TArray<UStaticMesh*> WindowsAccessories, TArray<UStaticMesh*> Pipe, USplineComponent* Spline,
 	                   USplineComponent* Spline_Segmented, const int Seed, FVector HeightVector,
 	                   int BalconyAccessoriesPercentage, int WallAccessoriesPercentage, TArray<int> BalconyLocations,
 	                   TArray<int> BalconyLocationsSides, TArray<int> EntraceLocations,
@@ -38,7 +39,7 @@ private:
 	void SpawnMesh(UStaticMesh* SelectedMesh, FTransform Transform);
 	UFUNCTION(BlueprintCallable)
 	UDynamicMesh* SpawnCap(UDynamicMesh* DynamicMesh, FGeometryScriptPrimitiveOptions PrimitiveOptions,
-	                       UGeometryScriptDebug* Debug, USplineComponent* Spline, float Height, bool bCapped,
+	                       UGeometryScriptDebug* Debug, USplineComponent* Spline,
 	                       FTransform Transform);
 	UFUNCTION(BlueprintCallable)
 	void SetDefaultValues(FVector HeightVector, UStaticMesh* Wall, UStaticMesh* Roof, FTransform& Transform);
