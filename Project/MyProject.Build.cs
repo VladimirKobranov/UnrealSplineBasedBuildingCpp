@@ -1,5 +1,5 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
+//Copyright Vk
+//https://github.com/VladimirKobranov
 using UnrealBuildTool;
 
 public class MyProject : ModuleRules
